@@ -19,5 +19,7 @@ stow -R bash     # restow (after adding/removing files)
 - `bash` — `.bashrc` (layered on top of Omarchy's defaults) and `.bash_aliases`
 - `bin` — personal scripts in `~/.local/bin` (e.g. `reload-shells`)
 - `hypr` — Hyprland `bindings.lua` (only this file; the rest of `~/.config/hypr` stays Omarchy-managed)
-- `nvim` — `lua/plugins/hidden-files.lua`: snacks file/grep pickers show dotfiles (rest of the LazyVim config stays Omarchy-managed)
+- `nvim` — full AstroNvim v6 config (replaces Omarchy's LazyVim). Before stowing, run
+  `mkdir -p ~/.config/nvim/lua/plugins` so that directory stays real: Omarchy symlinks
+  its active theme into it as `theme.lua`, which `lua/plugins/omarchy.lua` reads.
 - `yazi` — `yazi.toml` with `show_hidden = true` (also used by yazi.nvim)

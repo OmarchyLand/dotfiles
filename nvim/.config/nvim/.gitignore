@@ -1,0 +1,2 @@
+# Omarchy re-creates this symlink to the active theme; it is machine state, not config
+lua/plugins/theme.lua
