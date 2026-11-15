@@ -1,0 +1,4 @@
+# Only overrides; everything else falls back to yazi's defaults.
+# Also applies to yazi.nvim, which runs this same yazi config.
+[mgr]
+show_hidden = true

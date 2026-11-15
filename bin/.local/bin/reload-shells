@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Signal every open interactive bash to re-source ~/.bash_aliases on its next prompt.
+# Works by bumping a stamp file that a PROMPT_COMMAND hook in ~/.bashrc watches.
+set -euo pipefail
+
+stamp="${XDG_STATE_HOME:-$HOME/.local/state}/bash-reload.stamp"
+mkdir -p "$(dirname "$stamp")"
+touch "$stamp"
+
+command -v notify-send >/dev/null && notify-send -t 2000 "Shells" "Aliases will reload on next prompt" || true
