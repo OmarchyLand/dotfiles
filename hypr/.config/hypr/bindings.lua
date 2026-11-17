@@ -26,8 +26,18 @@
 -- o.bind("SUPER + H", nil, "voxtype record toggle")
 -- o.bind("SUPER + PERIOD", nil, { panel = "omarchy.emojis" })
 
--- Workspace overview (hyprexpo plugin)
-o.bind("SUPER + D", "Workspace overview", function() hl.plugin.hyprexpo.expo("toggle") end)
+-- Remove the default Omarchy reminder bindings
+hl.unbind("SUPER + CTRL + R")         -- Set reminder
+hl.unbind("SUPER + CTRL + ALT + R")   -- Show reminders
+hl.unbind("SUPER + SHIFT + CTRL + R") -- Clear reminders
+
+-- 2x3 window grid on the active workspace (press again to return to tiling).
+-- Replaced the hyprexpo workspace overview that used to live on SUPER+D.
+local grid = require("hypr.grid")
+o.rebind("SUPER + D", "Toggle 2x3 window grid", function() grid.toggle() end)
+-- While gridded these scroll the grid a column; otherwise they move focus as usual.
+o.rebind("SUPER + RIGHT", "Focus right / scroll grid right", function() grid.right() end)
+o.rebind("SUPER + LEFT", "Focus left / scroll grid left", function() grid.left() end)
 
 -- Reload aliases in all open bash shells (on their next prompt)
 o.bind("SUPER + ALT + R", "Reload shell aliases", "reload-shells")
