@@ -17,7 +17,7 @@ stow -R bash     # restow (after adding/removing files)
 ## Packages
 
 - `bash` — `.bashrc` (layered on top of Omarchy's defaults) and `.bash_aliases`
-- `bin` — personal scripts in `~/.local/bin` (e.g. `reload-shells`)
+- `bin` — personal scripts in `~/.local/bin` (e.g. `reload-shells`, `ports` — explains what is listening on each port)
 - `hypr` — Hyprland `bindings.lua` (only this file; the rest of `~/.config/hypr` stays Omarchy-managed)
 - `nvim` — full AstroNvim v6 config (replaces Omarchy's LazyVim). Before stowing, run
   `mkdir -p ~/.config/nvim/lua/plugins` so that directory stays real: Omarchy symlinks
