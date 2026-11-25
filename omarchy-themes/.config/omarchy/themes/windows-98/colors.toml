@@ -1,0 +1,39 @@
+# Windows 98 — the "Windows Standard" colour scheme, circa 1998.
+# Teal desktop, button-face grey chrome, white client areas with black
+# text, and the navy-to-blue gradient title bar that 98 introduced.
+mode = "light"
+
+accent = "#000080"
+selection = "#000080"
+selection_background = "#000080"
+selection_foreground = "#ffffff"
+muted = "#808080"
+hyprland_active_border = "rgb(000080) rgb(1084d0) 0deg"
+hyprland_inactive_border = "rgb(808080) rgb(b5b5b5) 0deg"
+
+background = "#ffffff"
+dark_background = "#c0c0c0"
+darker_background = "#808080"
+lighter_background = "#dfdfdf"
+
+foreground = "#000000"
+dark_foreground = "#808080"
+light_foreground = "#000000"
+bright_foreground = "#000000"
+
+# Low-intensity VGA colours: the ones that stay readable on white.
+red = "#800000"
+yellow = "#808000"
+orange = "#804000"
+green = "#008000"
+cyan = "#008080"
+blue = "#000080"
+magenta = "#800080"
+brown = "#804000"
+
+bright_red = "#ff0000"
+bright_yellow = "#808000"
+bright_green = "#008000"
+bright_cyan = "#008080"
+bright_blue = "#0000ff"
+bright_magenta = "#ff00ff"

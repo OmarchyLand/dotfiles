@@ -1,0 +1,43 @@
+# OLED Low Glare — tuned for minimum emitted light and halation.
+#  * Pure #000000 everywhere a surface can be: OLED pixels fully off.
+#  * Text is a dimmed warm grey (~8:1 contrast), not white: bright glyphs on
+#    black bloom/halate on OLED and reflect in glossy glass.
+#  * Accents are low-saturation and capped in brightness; blue is pulled
+#    down hardest since it scatters most and drives perceived glare.
+#  * Selection/raised surfaces are barely-lit so large highlighted areas
+#    never become light panels.
+mode = "dark"
+
+accent = "#a8814f"
+selection = "#1a1612"
+muted = "#5c564e"
+
+background = "#000000"
+dark_background = "#000000"
+darker_background = "#000000"
+lighter_background = "#0c0a08"
+
+foreground = "#a39c91"
+dark_foreground = "#47423c"
+light_foreground = "#b0a99e"
+bright_foreground = "#bfb7ab"
+
+red = "#a8625a"
+yellow = "#ad9a6c"
+orange = "#a8814f"
+green = "#859270"
+cyan = "#73908a"
+blue = "#7781a0"
+magenta = "#977487"
+brown = "#5f4a3a"
+
+bright_red = "#b8746b"
+bright_yellow = "#bcaa80"
+bright_green = "#97a383"
+bright_cyan = "#86a19b"
+bright_blue = "#8a93b0"
+bright_magenta = "#a88799"
+
+# Window borders: dim amber when focused, near-invisible when not.
+hyprland_active_border = "rgba(a8814f99)"
+hyprland_inactive_border = "rgba(1a161288)"
