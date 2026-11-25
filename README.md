@@ -20,7 +20,7 @@ stow -R bash     # restow (after adding/removing files)
 - `bin` — personal scripts in `~/.local/bin` (e.g. `reload-shells`, `ports` — explains what is listening on each port)
 - `hypr` — Hyprland `bindings.lua` (only this file; the rest of `~/.config/hypr` stays Omarchy-managed)
 - `omarchy-themes` — custom Omarchy themes in `~/.config/omarchy/themes` (deco-futura,
-  desert-dusk-oled, octagon, oled-low-glare, starry-night, windows-3.1, windows-98) plus
+  desert-dusk-oled, octagon, oled-low-glare, phreak, starry-night, windows-3.1, windows-98) plus
   pure-black `colors.toml` overlays for the stock themes. `~/.config/omarchy/themes` stays a
   real directory and each theme is its own symlink, so themes added with
   `omarchy theme install` stay out of the repo. After editing an active theme, re-apply it
