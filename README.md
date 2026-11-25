@@ -28,4 +28,20 @@ stow -R bash     # restow (after adding/removing files)
 - `nvim` — full AstroNvim v6 config (replaces Omarchy's LazyVim). Before stowing, run
   `mkdir -p ~/.config/nvim/lua/plugins` so that directory stays real: Omarchy symlinks
   its active theme into it as `theme.lua`, which `lua/plugins/omarchy.lua` reads.
+- `tmux` — `tmux.conf` (started from Omarchy's default; `omarchy refresh tmux` would
+  overwrite it). Ghostty runs `~/.local/bin/tmux-main`, which keeps four sessions `1`–`4`
+  with 9 windows each; hold `/` and press `z` `x` `c` `v` to switch (keyd sends Alt+F9–F12).
 - `yazi` — `yazi.toml` with `show_hidden = true` (also used by yazi.nvim)
+
+## Not stowed
+
+- `keyd` — system-wide key remapping (home row mods, nav/workspace layers). keyd
+  reads `/etc/keyd/` as root at boot, so this is copied rather than symlinked.
+  Don't `stow keyd`. After editing, install it with:
+
+  ```sh
+  sudo install -m 644 keyd/default.conf /etc/keyd/default.conf && sudo keyd reload
+  ```
+
+  If you edit `/etc/keyd/default.conf` directly, copy it back with
+  `cp /etc/keyd/default.conf keyd/`.

@@ -1,0 +1,20 @@
+#!/bin/bash
+# Make sure the four persistent tmux sessions "1".."4" exist, each with 9
+# windows, then attach to session 1. Used as Ghostty's `command`.
+#   tmux-main --ensure   only create missing sessions (used by tmux key binds)
+# Switch sessions with / held + z x c v  (keyd sends Alt+F9..F12 to tmux).
+
+for S in 1 2 3 4; do
+  tmux has-session -t "=$S" 2>/dev/null && continue
+  # One-time migration from the old single "main" session.
+  if [[ $S == 1 ]] && tmux has-session -t "=main" 2>/dev/null; then
+    tmux rename-session -t "=main" 1
+    continue
+  fi
+  tmux new-session -d -s "$S" -c ~
+  for _ in $(seq 2 9); do tmux new-window -t "=$S:" -c ~; done
+  tmux select-window -t "=$S:1"
+done
+
+[[ $1 == --ensure ]] && exit 0
+exec tmux attach-session -t "=1"
