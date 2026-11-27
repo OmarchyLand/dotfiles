@@ -17,7 +17,7 @@ stow -R bash     # restow (after adding/removing files)
 ## Packages
 
 - `bash` — `.bashrc` (layered on top of Omarchy's defaults) and `.bash_aliases`
-- `bin` — personal scripts in `~/.local/bin` (e.g. `reload-shells`, `ports` — explains what is listening on each port)
+- `bin` — personal scripts in `~/.local/bin` (e.g. `reload-shells`, `ports` — explains what is listening on each port, `mem` — which apps are using memory)
 - `hypr` — Hyprland `bindings.lua` (only this file; the rest of `~/.config/hypr` stays Omarchy-managed)
 - `omarchy-themes` — custom Omarchy themes in `~/.config/omarchy/themes` (deco-futura,
   desert-dusk-oled, octagon, oled-low-glare, phreak, starry-night, windows-3.1, windows-98) plus
@@ -25,12 +25,23 @@ stow -R bash     # restow (after adding/removing files)
   real directory and each theme is its own symlink, so themes added with
   `omarchy theme install` stay out of the repo. After editing an active theme, re-apply it
   with `omarchy theme set <name>`; Omarchy copies the theme rather than reading it live.
+  Each custom theme has a `screensaver.txt`; the theme-set hook
+  `hooks/theme-set.d/40-theme-screensaver` copies it to `~/.config/omarchy/branding/` on
+  every switch, and themes without one get `branding/screensaver.default.txt` (your
+  pre-theme screensaver) or the Omarchy logo back. Preview with
+  `omarchy-launch-screensaver force`.
+  For OLED, `hooks/theme-set.d/35-theme-oled-opaque` installs Omarchy's `window-opaque`
+  toggle whenever a `mode = "dark"` theme is set, so Ghostty and other normally
+  translucent windows are 100% opaque and the wallpaper never glows through the black;
+  switching to a light theme removes it again (only if the hook added it).
+  `hooks/font-set.d/10-hide-ghostty-restart` dismisses Omarchy's "restart Ghostty to see font
+  change" notification; Ghostty already reloads the font live on the SIGUSR2 font-set sends.
 - `nvim` — full AstroNvim v6 config (replaces Omarchy's LazyVim). Before stowing, run
   `mkdir -p ~/.config/nvim/lua/plugins` so that directory stays real: Omarchy symlinks
   its active theme into it as `theme.lua`, which `lua/plugins/omarchy.lua` reads.
 - `tmux` — `tmux.conf` (started from Omarchy's default; `omarchy refresh tmux` would
   overwrite it). Ghostty runs `~/.local/bin/tmux-main`, which keeps four sessions `1`–`4`
-  with 9 windows each; hold `/` and press `z` `x` `c` `v` to switch (keyd sends Alt+F9–F12).
+  with 5 windows each; hold `/` and press `z` `x` `c` `v` to switch (keyd sends Alt+F9–F12).
 - `yazi` — `yazi.toml` with `show_hidden = true` (also used by yazi.nvim)
 
 ## Not stowed

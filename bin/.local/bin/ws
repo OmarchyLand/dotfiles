@@ -1,0 +1,19 @@
+#!/bin/bash
+# ws [dir] — attach to (or create) a 9-window tmux session for a project dir.
+# Session is named after the dir; running it again reattaches instead of
+# duplicating. Inside tmux it switches the client rather than nesting.
+dir=$(realpath "${1:-$PWD}") || exit 1
+[ -d "$dir" ] || { echo "ws: not a directory: $dir" >&2; exit 1; }
+S=$(basename "$dir" | tr '.:' '__')
+
+if ! tmux has-session -t "=$S" 2>/dev/null; then
+  tmux new-session -d -s "$S" -c "$dir"
+  for _ in $(seq 2 9); do tmux new-window -t "=$S:" -c "$dir"; done
+  tmux select-window -t "=$S:1"
+fi
+
+if [ -n "$TMUX" ]; then
+  exec tmux switch-client -t "=$S"
+else
+  exec tmux attach-session -t "=$S"
+fi

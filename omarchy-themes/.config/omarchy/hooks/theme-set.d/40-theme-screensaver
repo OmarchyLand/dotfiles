@@ -1,0 +1,30 @@
+#!/bin/bash
+# Give each theme its own screensaver. A theme that ships a screensaver.txt
+# gets it copied over ~/.config/omarchy/branding/screensaver.txt (the file
+# omarchy-screensaver animates); any other theme gets the default back.
+# The default is whatever screensaver.txt held before the first themed one
+# replaced it, saved as screensaver.default.txt, or Omarchy's logo.
+# $1 holds the theme slug.
+set -u
+
+BRANDING="$HOME/.config/omarchy/branding"
+TARGET="$BRANDING/screensaver.txt"
+DEFAULT="$BRANDING/screensaver.default.txt"
+
+theme_art=""
+for f in "$HOME/.local/state/omarchy/current/theme/screensaver.txt" \
+         "$HOME/.config/omarchy/themes/${1:-}/screensaver.txt"; do
+  [[ -f $f ]] && theme_art=$f && break
+done
+
+mkdir -p "$BRANDING"
+
+if [[ -n $theme_art ]]; then
+  # Keep the user's own screensaver before the first themed one replaces it.
+  [[ -f $DEFAULT || ! -f $TARGET ]] || cp "$TARGET" "$DEFAULT"
+  cp "$theme_art" "$TARGET"
+elif [[ -f $DEFAULT ]]; then
+  cp "$DEFAULT" "$TARGET"
+elif [[ -f ${OMARCHY_PATH:-/usr/share/omarchy}/logo.txt ]]; then
+  cp "${OMARCHY_PATH:-/usr/share/omarchy}/logo.txt" "$TARGET"
+fi

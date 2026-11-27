@@ -1,0 +1,182 @@
+#!/usr/bin/env bash
+# mem [-n N] [-a] — show memory usage (free -h), then the apps using the most
+# memory with all of each app's processes added together (so 40 browser
+# processes count as one entry), plus the owning package, systemd unit and
+# command line.
+#   -n N  show the top N apps (default 15)
+#   -a    list every process separately instead of grouping by app
+# Memory is PSS: shared memory is split between the processes sharing it, so
+# the numbers add up instead of counting shared libraries many times over.
+# Re-runs itself with sudo (when there's a terminal to ask for the password)
+# because other users' processes can't be measured exactly without it.
+set -uo pipefail
+
+nosudo=0 top=15 all=0
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --no-sudo) nosudo=1 ;;
+    -n) top=${2:?-n needs a number}; shift ;;
+    -a) all=1 ;;
+    -h|--help) sed -n '2,12s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    *) echo "mem: unknown option $1" >&2; exit 1 ;;
+  esac
+  shift
+done
+
+if [[ $nosudo -eq 0 && $EUID -ne 0 ]] && command -v sudo >/dev/null; then
+  if sudo -n true 2>/dev/null || [[ -t 0 ]]; then
+    exec sudo "$0" --no-sudo -n "$top" $( ((all)) && echo -a )
+  fi
+  echo "mem: no terminal for a sudo password — other users' processes are estimated (~)" >&2
+  echo >&2
+fi
+
+if [[ -t 1 ]]; then
+  B=$'\e[1m' D=$'\e[2m' R=$'\e[31m' Y=$'\e[33m' G=$'\e[32m' N=$'\e[0m'
+else
+  B= D= R= Y= G= N=
+fi
+
+human() { awk -v k="$1" 'BEGIN { if (k >= 1048576) printf "%.1f GiB", k/1048576; else printf "%.0f MiB", k/1024 }'; }
+
+echo "${B}== free -h ==${N}"
+free -h
+echo
+
+# Plain-language summary of the numbers above.
+read -r total avail swap_total swap_free < <(awk '
+  /^MemTotal:/ {t=$2} /^MemAvailable:/ {a=$2} /^SwapTotal:/ {st=$2} /^SwapFree:/ {sf=$2}
+  END {print t, a, st, sf}' /proc/meminfo)
+used=$((total - avail))
+pct=$((used * 100 / total))
+if   ((pct >= 90)); then c=$R; elif ((pct >= 75)); then c=$Y; else c=$G; fi
+echo "${B}In use:${N} ${c}$(human $used) of $(human $total) (${pct}%)${N} — $(human $avail) still available."
+echo "${D}buff/cache is files kept in RAM for speed; the kernel frees it when apps need memory,${N}"
+echo "${D}so it already counts as available.${N}"
+if ((swap_total > 0)); then
+  swap_used=$((swap_total - swap_free))
+  if ((swap_used * 10 > swap_total)); then
+    echo "${Y}Swap in use: $(human $swap_used) — RAM has been tight at some point.${N}"
+  else
+    echo "${D}Swap: $(human $swap_used) of $(human $swap_total) used.${N}"
+  fi
+fi
+psi=$(awk '/^some/ {split($2, a, "="); print a[2]}' /proc/pressure/memory 2>/dev/null)
+if [[ -n $psi ]] && awk -v p="$psi" 'BEGIN { exit !(p > 1) }'; then
+  echo "${Y}Memory pressure: apps spent ${psi}% of the last 10s waiting on memory.${N}"
+fi
+echo
+
+# One tab-separated line per process:
+#   kB, approx-flag, pid, user, program path, process name, group key, label, path for package lookup
+# Uses only shell builtins per process (forking ~5 tools x 400 processes made
+# this take seconds). Kernel threads report no memory and are skipped.
+interp_re='^(python[0-9.]*|node|ruby|perl|bash|sh|zsh|java|lua[0-9.]*|deno|bun)$'
+collect() {
+  local d pid kb rss approx k v name uid user exe base script label key i a
+  local -a args
+  local -A exe_of uname
+  # Every process's binary in one call (find -printf instead of 400 readlinks).
+  while IFS=$'\t' read -r k v; do
+    k=${k#/proc/}; exe_of[${k%/exe}]=${v% (deleted)}
+  done < <(find /proc/[0-9]*/exe -maxdepth 0 -printf '%p\t%l\n' 2>/dev/null)
+
+  for d in /proc/[0-9]*; do
+    pid=${d#/proc/}
+    name= uid= rss= kb= approx=
+    { while IFS=$'\t' read -r k v; do
+        case $k in
+          Name:) name=$v ;;
+          Uid:) uid=${v%%$'\t'*} ;;
+          VmRSS:) rss=${v// /}; rss=${rss%kB}; break ;;
+        esac
+      done < "$d/status"; } 2>/dev/null
+    { while read -r k v _; do
+        [[ $k == Pss: ]] && { kb=$v; break; }
+      done < "$d/smaps_rollup"; } 2>/dev/null
+    if [[ -z $kb ]]; then kb=$rss; approx='~'; fi
+    [[ -n $kb && $kb -gt 0 ]] || continue
+
+    [[ -z ${uname[$uid]+x} ]] && uname[$uid]=$(getent passwd "$uid" | cut -d: -f1)
+    user=${uname[$uid]:-$uid}
+
+    args=()
+    { mapfile -d '' -t args < "$d/cmdline"; } 2>/dev/null
+    exe=${exe_of[$pid]:-}
+    # Without root the binary link is hidden for other users' processes;
+    # fall back to the command's first word when it's an absolute path.
+    [[ -z $exe && ${args[0]:-} == /* ]] && exe=${args[0]}
+    base=${exe##*/}; [[ -z $base ]] && base=${args[0]##*/}
+
+    # Interpreters (python, node, ...) run many unrelated programs, so group
+    # them by the script/module they run rather than by the interpreter.
+    script=
+    if [[ $base =~ $interp_re ]]; then
+      for ((i = 1; i < ${#args[@]}; i++)); do
+        a=${args[i]}
+        if [[ $a == -m ]]; then script=${args[i+1]:-}; break; fi
+        [[ $a == -* ]] && continue
+        script=$a; break
+      done
+    fi
+    if [[ -n $script ]]; then
+      key="$base $script"; label="${script##*/} ($base)"
+    else
+      key=${exe:-$name}; label=${base:-$name}
+    fi
+    pkgpath=$exe
+    [[ $script == /* ]] && pkgpath=$script
+
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kb" "${approx:--}" "$pid" "$user" \
+      "${exe:--}" "${name:--}" "$key" "$label" "${pkgpath:--}"
+  done
+}
+
+details() {  # pid path pkgpath — the extra lines shown under each entry
+  local pid=$1 path=$2 pkgpath=$3 unit uunit pkg cmd
+  unit=$(ps -o unit= -p "$pid" 2>/dev/null | xargs)
+  # Everything in your session is under user@UID.service; the user-level unit
+  # (e.g. app-Hyprland-firefox-*.scope) says how the app was actually started.
+  if [[ $unit == user@*.service ]]; then
+    uunit=$(ps -o uunit= -p "$pid" 2>/dev/null | xargs)
+    [[ -n $uunit && $uunit != - ]] && unit="$uunit  ${D}(in your user session)${N}"
+  fi
+  pkg=
+  [[ $pkgpath != - ]] && pkg=$(pacman -Qqo "$pkgpath" 2>/dev/null)
+  cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | cut -c1-150)
+  [[ -n $unit && $unit != - ]] && echo "  unit:    $unit"
+  [[ $pkgpath != - ]] && echo "  package: ${pkg:-${D}not from a package${N}}  ${D}$pkgpath${N}"
+  [[ -n $cmd ]] && echo "  command: $cmd"
+}
+
+if ((all)); then
+  echo "${B}== Top $top processes by memory ==${N}"
+  echo
+  collect | sort -t$'\t' -k1,1nr | head -n "$top" |
+  while IFS=$'\t' read -r kb approx pid user path name key label pkgpath; do
+    [[ $approx == - ]] && approx=
+    echo "${B}${label}${N}  ${approx}$(human "$kb")  ${D}(pid $pid, user $user)${N}"
+    details "$pid" "$path" "$pkgpath"
+    echo
+  done
+else
+  echo "${B}== Top $top apps by memory (processes of the same program added together) ==${N}"
+  echo
+  # Sum each group; keep its biggest process for the details lines.
+  collect | awk -F'\t' -v OFS='\t' '
+    { k = $7
+      kb[k] += $1; n[k]++
+      if ($2 == "~") ap[k] = 1
+      if ($1 > big[k]) { big[k] = $1; pid[k] = $3; path[k] = $5; label[k] = $8; pkg[k] = $9 }
+      if (!(k in users)) users[k] = $4
+      else if (index(" " users[k] " ", " " $4 " ") == 0) users[k] = users[k] " " $4 }
+    END { for (k in kb) print kb[k], (k in ap ? "~" : "-"), n[k], pid[k], users[k], path[k], label[k], pkg[k] }' |
+  sort -t$'\t' -k1,1nr | head -n "$top" |
+  while IFS=$'\t' read -r kb approx count pid users path label pkgpath; do
+    [[ $approx == - ]] && approx=
+    procs="1 process"; ((count > 1)) && procs="$count processes"
+    echo "${B}${label}${N}  ${approx}$(human "$kb")  ${D}($procs, user ${users// /, }; biggest pid $pid)${N}"
+    details "$pid" "$path" "$pkgpath"
+    echo
+  done
+fi

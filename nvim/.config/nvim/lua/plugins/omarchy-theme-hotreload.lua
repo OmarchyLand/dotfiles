@@ -5,8 +5,6 @@ return {
 		lazy = false,
 		priority = 1000,
 		config = function()
-			local transparency_file = vim.fn.stdpath("config") .. "/plugin/after/transparency.lua"
-
 			vim.api.nvim_create_autocmd("User", {
 				pattern = "LazyReload",
 				callback = function()
@@ -68,25 +66,16 @@ return {
 								end
 
 								vim.defer_fn(function()
-									-- Apply the colorscheme (it will set background itself)
+									-- Apply the colorscheme (it will set background itself). Its
+									-- ColorScheme event also runs the OLED blackout (oled.lua) and
+									-- refreshes heirline.
 									pcall(vim.cmd.colorscheme, colorscheme)
+
+									-- Let plugins that rebuild their UI on VimEnter catch up
+									vim.api.nvim_exec_autocmds("VimEnter", { modeline = false })
 
 									-- Force redraw to update all UI elements
 									vim.cmd("redraw!")
-
-									-- Reload transparency settings
-									if vim.fn.filereadable(transparency_file) == 1 then
-										vim.defer_fn(function()
-											vim.cmd.source(transparency_file)
-
-											-- Trigger UI updates for various plugins
-											vim.api.nvim_exec_autocmds("ColorScheme", { modeline = false })
-											vim.api.nvim_exec_autocmds("VimEnter", { modeline = false })
-
-											-- Final redraw
-											vim.cmd("redraw!")
-										end, 5)
-									end
 								end, 5)
 
 								break

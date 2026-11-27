@@ -1,0 +1,41 @@
+#!/bin/bash
+# OLED burn-in guard: dark themes get fully opaque windows. Omarchy makes
+# terminals (Ghostty etc.) and a few apps 0.985/0.96 transparent, which lets
+# the wallpaper glow through what should be #000000 off-pixels. For a theme
+# with mode = "dark" this installs Omarchy's own window-opaque toggle (the
+# same file Appearance > Windows > Window Opacity writes); a light theme gets
+# it removed again, but only if this hook was the one that put it there.
+# $1 holds the theme slug.
+set -u
+
+TOGGLES="$HOME/.local/state/omarchy/toggles/hypr"
+OPAQUE="$TOGGLES/window-opaque.lua"
+GLASSY="$TOGGLES/window-glassy.lua"
+MARKER="$HOME/.local/state/omarchy/oled-opaque.managed"
+SRC="${OMARCHY_PATH:-/usr/share/omarchy}/default/hypr/toggles/window-opaque.lua"
+
+colors=""
+for f in "$HOME/.local/state/omarchy/current/theme/colors.toml" \
+         "$HOME/.config/omarchy/themes/${1:-}/colors.toml" \
+         "${OMARCHY_PATH:-/usr/share/omarchy}/themes/${1:-}/colors.toml"; do
+  [[ -f $f ]] && colors=$f && break
+done
+[[ -n $colors ]] || exit 0
+
+mode=$(sed -n 's/^[[:space:]]*mode[[:space:]]*=[[:space:]]*"\(.*\)".*/\1/p' "$colors" | head -1)
+
+changed=0
+mkdir -p "$TOGGLES"
+if [[ $mode == dark ]]; then
+  if [[ ! -f $OPAQUE ]]; then
+    cp "$SRC" "$OPAQUE" && touch "$MARKER" && changed=1
+  fi
+  if [[ -f $GLASSY ]]; then
+    rm -f "$GLASSY" && changed=1
+  fi
+elif [[ -f $MARKER ]]; then
+  rm -f "$OPAQUE" "$MARKER" && changed=1
+fi
+
+(( changed )) && hyprctl reload >/dev/null 2>&1
+exit 0

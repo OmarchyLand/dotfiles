@@ -1,0 +1,41 @@
+# hackerman icons: blocks and brackets, green-screen terminal.
+# The apps in ~/Work/apps read this from the current theme (windows live,
+# terminal apps at start). A key left out keeps the default; "" hides it.
+
+[icons]
+
+# lists
+cursor = "»"
+bullet = "▪"
+on = "■"
+off = "□"
+
+# state
+unread = "◆"
+replied = "↲"
+starred = "✱"
+pinned = "▲"
+done = "■"
+todo = "□"
+checked = "▣"
+unchecked = "□"
+seen = "▫"
+sensitive = "⌀"
+busy = "◴"
+warning = "‼"
+
+# kinds of things
+play = "►"
+live = "◘"
+gallery = "▤"
+text = "¶"
+link = "⇗"
+note = "≣"
+totp = "⌚"
+upvote = "▴"
+
+# time and place
+recurring = "⟲"
+location = "⌖"
+birthday = "✱"
+countdown = "⌛"

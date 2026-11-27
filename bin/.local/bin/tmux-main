@@ -1,8 +1,16 @@
 #!/bin/bash
-# Make sure the four persistent tmux sessions "1".."4" exist, each with 9
-# windows, then attach to session 1. Used as Ghostty's `command`.
+# Make sure the four persistent tmux sessions "1".."4" exist, each with 5
+# windows (more if a session has more apps than that), then attach to
+# session 1. Used as Ghostty's `command`.
 #   tmux-main --ensure   only create missing sessions (used by tmux key binds)
 # Switch sessions with / held + z x c v  (keyd sends Alt+F9..F12 to tmux).
+#
+# Session 3 opens the productivity apps and session 4 the entertainment apps,
+# one per window (the TUIs from ~/Work/apps, `<app>-cli`). Each is started
+# from a shell, so quitting an app leaves a prompt in its window.
+
+productivity=(mail calendar reminders notes vault cost-control)
+entertainment=(tube reddit been browsing)
 
 for S in 1 2 3 4; do
   tmux has-session -t "=$S" 2>/dev/null && continue
@@ -11,8 +19,20 @@ for S in 1 2 3 4; do
     tmux rename-session -t "=main" 1
     continue
   fi
+  apps=()
+  [[ $S == 3 ]] && apps=("${productivity[@]}")
+  [[ $S == 4 ]] && apps=("${entertainment[@]}")
+  windows=$(( ${#apps[@]} > 5 ? ${#apps[@]} : 5 ))
+
   tmux new-session -d -s "$S" -c ~
-  for _ in $(seq 2 9); do tmux new-window -t "=$S:" -c ~; done
+  for _ in $(seq 2 "$windows"); do tmux new-window -t "=$S:" -c ~; done
+
+  for i in "${!apps[@]}"; do
+    cmd="${apps[$i]}-cli"
+    command -v "$cmd" >/dev/null || continue
+    tmux send-keys -t "=$S:$((i + 1))" "$cmd" Enter
+  done
+
   tmux select-window -t "=$S:1"
 done
 

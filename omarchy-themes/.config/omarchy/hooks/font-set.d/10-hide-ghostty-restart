@@ -1,0 +1,19 @@
+#!/bin/bash
+# omarchy-font-set ends with a "You must restart Ghostty to see font change"
+# notification, but it has already sent Ghostty SIGUSR2 and Ghostty reloads
+# font-family live, so the warning is noise. This font-set hook runs right
+# after it and takes the card back off screen through the shell's
+# notifications IPC (dismiss matches by summary substring). The text comes
+# from omarchy-i18n so it matches in any language. Foot's warning is left
+# alone: Foot really does need a restart.
+set -u
+
+needle=$(omarchy-i18n font.restartToSeeChange Ghostty 2>/dev/null)
+[[ -n $needle ]] || exit 0
+
+# The card can land a moment after Notify returns; try for up to ~1s.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [[ $(omarchy-shell notifications dismiss "$needle" 2>/dev/null) == *ok* ]] && break
+  sleep 0.1
+done
+exit 0
