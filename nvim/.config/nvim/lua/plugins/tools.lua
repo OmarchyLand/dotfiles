@@ -1,6 +1,21 @@
--- Git blame and autosave.
+-- Git blame, GitHub (octo), and autosave.
 ---@type LazySpec
 return {
+  {
+    "pwntester/octo.nvim",
+    cmd = "Octo",
+    dependencies = { "nvim-lua/plenary.nvim", "folke/snacks.nvim", "nvim-tree/nvim-web-devicons" },
+    opts = { picker = "snacks", enable_builtin = true },
+    keys = {
+      { "<Leader>O", desc = "󰊤 GitHub (Octo)" },
+      { "<Leader>Oo", "<Cmd>Octo<CR>", desc = "Octo actions" },
+      { "<Leader>Op", "<Cmd>Octo pr list<CR>", desc = "List PRs" },
+      { "<Leader>Oi", "<Cmd>Octo issue list<CR>", desc = "List issues" },
+      { "<Leader>Or", "<Cmd>Octo review<CR>", desc = "Review current PR" },
+      { "<Leader>Os", "<Cmd>Octo search<CR>", desc = "Search GitHub" },
+    },
+  },
+
   {
     "FabijanZulj/blame.nvim",
     cmd = "BlameToggle",

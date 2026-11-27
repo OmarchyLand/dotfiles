@@ -17,3 +17,4 @@ alias ,gco='git checkout'
 alias ,g='git status'
 
 alias ,wifi='wifi'   # fzf Wi-Fi picker (~/.local/bin/wifi)
+alias ,battery='battery'   # battery saver: on|off|status (~/.local/bin/battery)

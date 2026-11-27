@@ -1,0 +1,50 @@
+# Terse movie-terminal prompt:  user@host:~/path (branch*)#
+# Colors are ANSI names, so they follow the active Omarchy theme's terminal palette.
+add_newline = false
+command_timeout = 200
+format = "$username$hostname[:](bold)$directory$git_branch$git_status$character"
+
+[username]
+show_always = true
+format = "[$user]($style)"
+style_user = "bold green"
+style_root = "bold red"
+
+[hostname]
+ssh_only = false
+format = "[@$hostname]($style)"
+style = "bold green"
+
+[directory]
+format = "[$path]($style)[$read_only]($read_only_style)"
+style = "bold"
+truncation_length = 3
+truncate_to_repo = false
+truncation_symbol = "…/"
+read_only = " ro"
+read_only_style = "red"
+
+[git_branch]
+format = " [\\($branch]($style)"
+style = "green"
+
+# Closes the bracket opened by git_branch; a single * marks a dirty tree.
+[git_status]
+format = "[$conflicted$modified$staged$untracked$renamed$deleted$ahead_behind\\)]($style)"
+style = "green"
+conflicted = "!"
+modified = "*"
+staged = "+"
+untracked = "?"
+renamed = ""
+deleted = "*"
+ahead = "↑${count}"
+behind = "↓${count}"
+diverged = "↕"
+up_to_date = ""
+stashed = ""
+
+[character]
+success_symbol = "[#](bold green)"
+error_symbol = "[#](bold red)"
+vimcmd_symbol = "[<](bold green)"

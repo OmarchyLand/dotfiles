@@ -1,0 +1,11 @@
+[Plymouth Theme]
+Name=Ghost
+Description=Movie-terminal boot splash in the active Omarchy theme's colours.
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/ghost
+ScriptFile=/usr/share/plymouth/themes/ghost/ghost.script
+ConsoleLogBackgroundColor=0x000000
+MonospaceFont=Hack Nerd Font Mono 11
+Font=Hack Nerd Font 11

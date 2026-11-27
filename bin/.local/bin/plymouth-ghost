@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+# plymouth-ghost [sync|install|test|revert|status|render DIR] — movie-terminal boot splash.
+#   sync     (default) install, then rebuild the boot image so it shows at boot
+#            (sudo). Re-run after `omarchy theme set` to recolour it.
+#   install  bake the active Omarchy theme's colours into the ghost Plymouth
+#            theme and make it the default, without rebuilding (sudo)
+#   test     show the installed splash for a few seconds, with a fake status
+#            line and passphrase prompt. Run from a text console (Ctrl+Alt+F3),
+#            not inside Hyprland (sudo)
+#   revert   switch back to Omarchy's own splash and rebuild (sudo)
+#   status   show the configured splash and which theme it was baked from
+#   render   write the generated theme into DIR without installing
+#
+# The splash runs from the initramfs before the disk is unlocked, so it can't
+# read the current theme at boot; its colours are fixed at `sync` time.
+set -euo pipefail
+
+src=$(dirname "$(readlink -f "$0")")/../../../plymouth/ghost
+src=$(readlink -f "$src")
+theme_state=$HOME/.local/state/omarchy/current
+dest=/usr/share/plymouth/themes/ghost
+
+die() { echo "plymouth-ghost: $*" >&2; exit 1; }
+
+[[ -f $src/ghost.script.in ]] || die "template not found in $src"
+
+# "#82FB9C" -> "0.510, 0.984, 0.612"-style components, one per call.
+component() { # hex index(0..2)
+  local hex=${1#\#}
+  awk -v v="$((16#${hex:$(($2 * 2)):2}))" 'BEGIN { printf "%.3f", v / 255 }'
+}
+
+color_of() { # key fallback
+  local v
+  v=$(sed -nE "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"(#[0-9A-Fa-f]{6})\".*/\1/p" "$theme_state/theme/colors.toml" 2>/dev/null | head -1)
+  echo "${v:-$2}"
+}
+
+# Chatter colour: the accent darkened toward the background, so the scroll
+# stays one hue in every theme. Uses render's $ac and $bg.
+dim_component() { # index
+  awk -v a="$(component "$ac" "$1")" -v b="$(component "$bg" "$1")" 'BEGIN { printf "%.3f", a * 0.5 + b * 0.5 }'
+}
+
+render() { # outdir
+  local out=$1 theme host
+  theme=$(cat "$theme_state/theme.name" 2>/dev/null || echo unknown)
+  host=$(cat /etc/hostname 2>/dev/null || hostname)
+  local fg
+  bg=$(color_of background "#000000")
+  fg=$(color_of foreground "#c0c0c0")
+  ac=$(color_of accent "#82fb9c")
+
+  mkdir -p "$out"
+  cp "$src/ghost.plymouth" "$out/ghost.plymouth"
+  # Theme names and hostnames are plain words; strip anything that could
+  # break out of the script's string literals.
+  local safe_theme=${theme//[^A-Za-z0-9 ._-]/} safe_host=${host//[^A-Za-z0-9._-]/}
+  sed \
+    -e "s/@BG_R@/$(component "$bg" 0)/; s/@BG_G@/$(component "$bg" 1)/; s/@BG_B@/$(component "$bg" 2)/" \
+    -e "s/@FG_R@/$(component "$fg" 0)/; s/@FG_G@/$(component "$fg" 1)/; s/@FG_B@/$(component "$fg" 2)/" \
+    -e "s/@AC_R@/$(component "$ac" 0)/; s/@AC_G@/$(component "$ac" 1)/; s/@AC_B@/$(component "$ac" 2)/" \
+    -e "s/@DIM_R@/$(dim_component 0)/; s/@DIM_G@/$(dim_component 1)/; s/@DIM_B@/$(dim_component 2)/" \
+    -e "s/@THEME@/$safe_theme/g; s/@HOST@/$safe_host/g" \
+    "$src/ghost.script.in" >"$out/ghost.script"
+  if grep -q '@[A-Z_]*@' "$out/ghost.script"; then
+    die "unfilled placeholder in generated script"
+  fi
+  # The background is also the console colour plymouth falls back to.
+  sed -i "s/^ConsoleLogBackgroundColor=.*/ConsoleLogBackgroundColor=0x${bg#\#}/" "$out/ghost.plymouth"
+  echo "$theme"
+}
+
+rebuild() {
+  if command -v limine-mkinitcpio >/dev/null; then
+    sudo limine-mkinitcpio
+  else
+    sudo mkinitcpio -P
+  fi
+}
+
+cmd=${1:-sync}
+case $cmd in
+  render)
+    [[ -n ${2:-} ]] || die "usage: plymouth-ghost render DIR"
+    theme=$(render "$2")
+    echo "Rendered ghost splash for theme '$theme' into $2"
+    ;;
+  install | sync)
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+    theme=$(render "$tmp")
+    echo "Installing ghost splash in the colours of '$theme'..."
+    sudo install -d "$dest"
+    sudo install -m 644 "$tmp/ghost.plymouth" "$tmp/ghost.script" "$dest/"
+    sudo plymouth-set-default-theme ghost
+    if [[ $cmd == sync ]]; then
+      echo "Rebuilding the boot image..."
+      rebuild
+      echo "Done. You'll see it on the next boot (or shutdown)."
+    else
+      echo "Installed (boot image not rebuilt). Try it with: plymouth-ghost test"
+    fi
+    ;;
+  test)
+    [[ -z ${WAYLAND_DISPLAY:-} ]] || die "run this from a text console (Ctrl+Alt+F3), not inside Hyprland"
+    log=/tmp/plymouth-ghost-test.log
+    sudo plymouthd --debug --debug-file="$log" --tty="$(tty)"
+    sudo plymouth show-splash
+    sleep 3
+    sudo plymouth update --status="Started Ghost test unit."
+    sleep 2
+    echo "(type anything and press Enter at the prompt)"
+    sudo plymouth ask-for-password --prompt="Please enter passphrase for disk root" >/dev/null || true
+    sleep 3
+    sudo plymouth quit
+    echo "Script errors, if any: grep -i error $log"
+    ;;
+  revert)
+    sudo plymouth-set-default-theme omarchy
+    rebuild
+    echo "Back to Omarchy's splash from the next boot."
+    ;;
+  status)
+    echo "configured splash: $(plymouth-set-default-theme)"
+    if [[ -f $dest/ghost.script ]]; then
+      echo "ghost baked from:  $(sed -nE 's/.*from the Omarchy theme "(.*)"\..*/\1/p' "$dest/ghost.script")"
+    fi
+    echo "current theme:     $(cat "$theme_state/theme.name" 2>/dev/null)"
+    ;;
+  -h | --help)
+    sed -n "2,/^set -euo/{/^#/p}" "$0" | sed 's/^# \{0,1\}//'
+    ;;
+  *)
+    die "unknown command: $1 (try --help)"
+    ;;
+esac

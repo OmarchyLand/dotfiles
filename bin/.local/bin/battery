@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# battery [on|off|status] — battery saver mode (sudo only for Wi-Fi power save).
+#   on      (default) power-saver profile, Bluetooth off if nothing is
+#           connected, Wi-Fi power saving on, screen dimmed to $BATTERY_BRIGHTNESS
+#           (default 40%) if brighter, keyboard backlight off, Hyprland
+#           animations/blur/shadows off
+#   off     put back everything `on` changed, as it was before
+#   status  show what is currently set and the battery draw
+# What `on` changes is recorded in ~/.local/state/battery-saver so `off` only
+# undoes its own changes (e.g. Bluetooth you'd already turned off stays off).
+set -uo pipefail
+
+state=${XDG_STATE_HOME:-$HOME/.local/state}/battery-saver
+dim=${BATTERY_BRIGHTNESS:-40}
+
+if [[ -t 1 ]]; then
+  B=$'\e[1m' D=$'\e[2m' G=$'\e[32m' Y=$'\e[33m' N=$'\e[0m'
+else
+  B= D= G= Y= N=
+fi
+say()  { printf '  %s✓%s %s\n' "$G" "$N" "$*"; }
+skip() { printf '  %s·%s %s%s%s\n' "$D" "$N" "$D" "$*" "$N"; }
+
+wifi_dev() { nmcli -t -f DEVICE,TYPE,STATE dev 2>/dev/null | awk -F: '$2 == "wifi" && $3 == "connected" { print $1; exit }'; }
+kbd_dev() { brightnessctl -l -m 2>/dev/null | awk -F, '$1 ~ /kbd_backlight/ { print $1; exit }'; }
+bt_on() { omarchy-bluetooth-power is-on; }
+bt_connected() { timeout 3s bluetoothctl devices Connected 2>/dev/null | grep -c '^Device'; }
+anim_off() { omarchy-hyprland-toggle-enabled no-animations; }
+can_sudo() { sudo -n true 2>/dev/null || [[ -t 0 ]]; }
+
+saver_on() {
+  mkdir -p "$state"
+  echo "${B}Battery saver on${N}"
+
+  # Power profile — remember the old one only on the first `on`, so running
+  # `on` twice doesn't overwrite it with power-saver.
+  local profile
+  profile=$(powerprofilesctl get)
+  if [[ $profile != power-saver ]]; then
+    echo "$profile" >"$state/profile"
+    powerprofilesctl set power-saver
+    omarchy-shell -q battery refreshPowerProfile >/dev/null 2>&1 || true
+    say "power profile: $profile → power-saver"
+  else
+    skip "power profile already power-saver"
+  fi
+
+  # Bluetooth — only if nothing (headphones, mouse…) is connected.
+  if bt_on; then
+    local n
+    n=$(bt_connected)
+    if ((n == 0)); then
+      omarchy-bluetooth-power off && touch "$state/bluetooth" && say "bluetooth off (nothing connected)"
+    else
+      skip "bluetooth left on: $n device(s) connected"
+    fi
+  else
+    skip "bluetooth already off"
+  fi
+
+  # Wi-Fi power saving — NetworkManager config disables it globally
+  # (wifi.powersave = 2) and can't change it on a live connection, so set it
+  # on the card with iw, which needs root. Lasts until the next reconnect.
+  local wdev
+  wdev=$(wifi_dev)
+  if [[ -z $wdev ]]; then
+    skip "wi-fi not connected"
+  elif [[ $(iw dev "$wdev" get power_save 2>/dev/null) == *": on" ]]; then
+    skip "wi-fi power saving already on"
+  elif ! can_sudo; then
+    skip "wi-fi power saving needs sudo (no terminal to ask)"
+  elif sudo iw dev "$wdev" set power_save on; then
+    echo "$wdev" >"$state/wifi"
+    say "wi-fi power saving on ($wdev)"
+  else
+    skip "couldn't enable wi-fi power saving"
+  fi
+
+  # Screen brightness — dim only if brighter than the target.
+  local cur
+  cur=$(brightnessctl -m -c backlight 2>/dev/null | awk -F, '{ gsub(/%/, "", $4); print $4; exit }')
+  if [[ -n $cur ]] && ((cur > dim)); then
+    [[ -f $state/brightness ]] || echo "$cur" >"$state/brightness"
+    brightnessctl -q -c backlight set "${dim}%"
+    say "screen brightness: $cur% → $dim%"
+  else
+    skip "screen brightness ${cur:-?}% (≤ $dim%)"
+  fi
+
+  # Keyboard backlight.
+  local kdev kcur
+  kdev=$(kbd_dev)
+  if [[ -n $kdev ]]; then
+    kcur=$(brightnessctl -d "$kdev" get)
+    if ((kcur > 0)); then
+      [[ -f $state/kbd ]] || echo "$kcur" >"$state/kbd"
+      brightnessctl -q -d "$kdev" set 0
+      say "keyboard backlight off"
+    else
+      skip "keyboard backlight already off"
+    fi
+  fi
+
+  # Animations, blur and shadows (Omarchy's flag; Hyprland reloads on change).
+  if anim_off; then
+    skip "animations already off"
+  else
+    omarchy-hyprland-toggle no-animations on >/dev/null && touch "$state/anim" && say "animations, blur and shadows off"
+  fi
+
+  echo
+  status_line
+}
+
+saver_off() {
+  if [[ ! -d $state ]]; then
+    echo "Battery saver isn't on (nothing recorded in $state)."
+    return 0
+  fi
+  echo "${B}Battery saver off${N}"
+
+  if [[ -f $state/profile ]]; then
+    local p
+    p=$(<"$state/profile")
+    powerprofilesctl set "$p" && omarchy-shell -q battery refreshPowerProfile >/dev/null 2>&1
+    say "power profile → $p"
+  fi
+  if [[ -f $state/bluetooth ]]; then
+    omarchy-bluetooth-power on && say "bluetooth on"
+  fi
+  if [[ -f $state/wifi ]]; then
+    if can_sudo && sudo iw dev "$(<"$state/wifi")" set power_save off 2>/dev/null; then
+      say "wi-fi power saving off"
+    else
+      skip "wi-fi power saving left on (needs sudo; resets on reconnect anyway)"
+    fi
+  fi
+  if [[ -f $state/brightness ]]; then
+    brightnessctl -q -c backlight set "$(<"$state/brightness")%" && say "screen brightness → $(<"$state/brightness")%"
+  fi
+  if [[ -f $state/kbd ]]; then
+    local kdev
+    kdev=$(kbd_dev)
+    [[ -n $kdev ]] && brightnessctl -q -d "$kdev" set "$(<"$state/kbd")" && say "keyboard backlight on"
+  fi
+  if [[ -f $state/anim ]]; then
+    omarchy-hyprland-toggle no-animations off >/dev/null && say "animations back on"
+  fi
+
+  rm -rf "$state"
+}
+
+status_line() {
+  local s
+  s=$(omarchy-battery-status 2>/dev/null)
+  [[ -n $s ]] && echo "$s"
+}
+
+status() {
+  if [[ -d $state ]]; then echo "${B}Battery saver: ${G}on${N}"; else echo "${B}Battery saver: ${Y}off${N}"; fi
+  status_line
+  echo
+  local wdev ps
+  wdev=$(wifi_dev)
+  if [[ -n $wdev ]]; then
+    ps=$(iw dev "$wdev" get power_save 2>/dev/null | awk '{ print $3 }')
+  fi
+  printf '  %-18s %s\n' "power profile" "$(powerprofilesctl get)"
+  if bt_on; then
+    printf '  %-18s on, %s connected\n' "bluetooth" "$(bt_connected)"
+  else
+    printf '  %-18s off\n' "bluetooth"
+  fi
+  printf '  %-18s %s\n' "wi-fi power save" "${ps:-n/a}"
+  printf '  %-18s %s\n' "screen brightness" "$(brightnessctl -m -c backlight 2>/dev/null | cut -d, -f4)"
+  local kdev
+  kdev=$(kbd_dev)
+  [[ -n $kdev ]] && printf '  %-18s %s\n' "keyboard light" "$(brightnessctl -m -d "$kdev" | cut -d, -f4)"
+  if anim_off; then printf '  %-18s off\n' "animations"; else printf '  %-18s on\n' "animations"; fi
+}
+
+case ${1:-on} in
+  on) saver_on ;;
+  off) saver_off ;;
+  status | s) status ;;
+  -h | --help) sed -n '2,10s/^# \{0,1\}//p' "$0" ;;
+  *) echo "battery: unknown option $1 (on|off|status)" >&2; exit 1 ;;
+esac

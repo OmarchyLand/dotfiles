@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "jfolino.lock",
+  "name": "Themed Lock",
+  "version": "2.0.0",
+  "author": "Omarchy",
+  "description": "Omarchy lock screen with a different overlay for each theme (themes/<name>.qml, movie-terminal fallback). Authentication is Omarchy's own Service.qml (symlinked).",
+  "omarchy": {
+    "capabilities": [
+      "authentication"
+    ],
+    "clonedFrom": "omarchy.lock"
+  },
+  "kinds": [
+    "service"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml"
+  }
+}
