@@ -36,10 +36,17 @@ fi
 #   nvim/lua/plugins  — Omarchy drops its theme.lua symlink in here
 #   omarchy/themes    — themes from `omarchy theme install` stay out of the repo
 #   omarchy/plugins   — plugins from `omarchy plugin add` stay out of the repo
+#   jdf               — amplitude.key (a secret) sits beside the stowed
+#                       usage.toml and must never land in this public repo
+# Do NOT add ~/.config/ghostty here. It has to stay one folded symlink, because
+# omarchy-font-set runs `sed -i` (without --follow-symlinks) on its config.
+# With the folded directory that sed writes into the repo. With a per-file link
+# it swaps the link for a plain file and the next restow conflicts.
 keep_real=(
   "$HOME/.config/nvim/lua/plugins"
   "$HOME/.config/omarchy/themes"
   "$HOME/.config/omarchy/plugins"
+  "$HOME/.config/jdf"
 )
 ((${#dry[@]})) || mkdir -p "${keep_real[@]}"
 
