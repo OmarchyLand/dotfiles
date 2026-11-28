@@ -1,0 +1,23 @@
+# Key-usage logging for the jdf apps (~/Work/apps, shared/usage): every vim
+# key sequence the apps act on goes to ~/.local/state/jdf/usage.jsonl, and up
+# to Amplitude when a key is set. Report on it with `usage top`, `usage status`.
+# An environment variable, where named, wins over this file. Apps read it
+# when they start.
+
+# Log keys at all. JDF_USAGE=0 overrides (bin/dev, bin/sandbox and bin/test
+# set it so sample data stays out).
+enabled = true
+
+# Amplitude data centre: "us" or "eu". AMPLITUDE_REGION overrides.
+region = "us"
+
+# Amplitude user id (5+ characters). Empty sends only the random device id
+# in ~/.local/state/jdf/usage.device. AMPLITUDE_USER_ID overrides.
+user_id = ""
+
+# How often a running app uploads new events, in minutes.
+upload_minutes = 10
+
+# The API key is a secret and this repo is public, so it is NOT here. Put it
+# in ~/.config/jdf/amplitude.key (a real file, not stowed) or set
+# AMPLITUDE_API_KEY.

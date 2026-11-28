@@ -3,13 +3,13 @@
 # windows (more if a session has more apps than that), then attach to
 # session 1. Used as Ghostty's `command`.
 #   tmux-main --ensure   only create missing sessions (used by tmux key binds)
-# Switch sessions with / held + z x c v  (keyd sends Alt+F9..F12 to tmux).
+# Switch sessions with / held + q w e r  (keyd sends Alt+F9..F12 to tmux).
 #
 # Session 3 opens the productivity apps and session 4 the entertainment apps,
-# one per window (the TUIs from ~/Work/apps, `<app>-cli`). Each is started
+# one per window (the TUIs from ~/Work/apps, `jdf-<app>-cli`). Each is started
 # from a shell, so quitting an app leaves a prompt in its window.
 
-productivity=(mail calendar reminders notes vault cost-control)
+productivity=(mail calendar reminders notes vault cost-control super-tracker)
 entertainment=(tube reddit been browsing)
 
 for S in 1 2 3 4; do
@@ -28,7 +28,7 @@ for S in 1 2 3 4; do
   for _ in $(seq 2 "$windows"); do tmux new-window -t "=$S:" -c ~; done
 
   for i in "${!apps[@]}"; do
-    cmd="${apps[$i]}-cli"
+    cmd="jdf-${apps[$i]}-cli"
     command -v "$cmd" >/dev/null || continue
     tmux send-keys -t "=$S:$((i + 1))" "$cmd" Enter
   done

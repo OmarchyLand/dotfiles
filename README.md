@@ -26,7 +26,11 @@ real, and reports conflicts without stopping):
 ## Packages
 
 - `bash` — `.bashrc` (layered on top of Omarchy's defaults) and `.bash_aliases`
-- `bin` — personal scripts in `~/.local/bin` (e.g. `reload-shells`, `ports` — explains what is listening on each port, `mem` — which apps are using memory, `battery` — battery saver: `,battery` / `,battery off` / `,battery status`, `plymouth-ghost` — installs the `plymouth` boot splash, see below)
+- `bin` — personal scripts in `~/.local/bin` (e.g. `reload-shells`, `ports` — explains what is listening on each port, `mem` — which apps are using memory, `battery` — battery saver: `,battery` / `,battery off` / `,battery status`, `mkpr` — `,pr` opens a pull request for the current branch with a Claude-written title and description, `plymouth-ghost` — installs the `plymouth` boot splash, see below)
+- `jdf` — `~/.config/jdf/usage.toml`, settings for the key-usage logging in `~/Work/apps`
+  (on/off, Amplitude region, user id, upload interval). The Amplitude API key is a secret and
+  stays out of this public repo: it goes in `~/.config/jdf/amplitude.key`, a real file beside the
+  link (`install.sh` keeps `~/.config/jdf` a real directory, and `.gitignore` covers the key).
 - `hypr` — Hyprland `bindings.lua` and `looknfeel.lua` (the rest of `~/.config/hypr` stays
   Omarchy-managed). `looknfeel.lua` drops gaps and gives only the focused window a 1px border
   and a soft glow, both in the active theme's `accent` read from `colors.toml` (theme switches
@@ -75,7 +79,7 @@ real, and reports conflicts without stopping):
   its active theme into it as `theme.lua`, which `lua/plugins/omarchy.lua` reads.
 - `tmux` — `tmux.conf` (started from Omarchy's default; `omarchy refresh tmux` would
   overwrite it). Ghostty runs `~/.local/bin/tmux-main`, which keeps four sessions `1`–`4`
-  with 5 windows each; hold `/` and press `z` `x` `c` `v` to switch (keyd sends Alt+F9–F12).
+  with 5 windows each; hold `/` and press `q` `w` `e` `r` to switch (keyd sends Alt+F9–F12).
 - `yazi` — `yazi.toml` with `show_hidden = true` (also used by yazi.nvim)
 
 ## Not stowed

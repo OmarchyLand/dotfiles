@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# mkpr [-b base] [-y] [gh pr create flags...] — open a pull request for the
+# current branch, with a title and short description written by Claude.
+#   -b base   branch to merge into (default: the repo's default branch)
+#   -y        don't ask, just create it
+#   anything else is passed through to `gh pr create` (e.g. --draft, --web)
+# Pushes the branch first if needed, then opens the PR in the browser. If the
+# branch already has a PR, pushes any new commits and opens that instead.
+# PR_MODEL picks the Claude model (default: haiku).
+set -euo pipefail
+
+if [[ -t 1 ]]; then
+  B=$'\e[1m' D=$'\e[2m' R=$'\e[31m' Y=$'\e[33m' N=$'\e[0m'
+else
+  B= D= R= Y= N=
+fi
+die() { printf '%serror:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
+
+# Push if there's no upstream or we're ahead of it.
+push() {
+  if ! git rev-parse -q --verify '@{u}' >/dev/null 2>&1; then
+    echo "${D}Pushing $branch...${N}"
+    git push -q -u origin HEAD
+  elif [[ -n $(git rev-list '@{u}..HEAD') ]]; then
+    echo "${D}Pushing $branch...${N}"
+    git push -q
+  fi
+}
+open_url() { xdg-open "$1" >/dev/null 2>&1 & disown; }
+
+base= yes= pass=()
+while (($#)); do
+  case $1 in
+    -b|--base) base=${2:?-b needs a branch}; shift 2 ;;
+    -y|--yes) yes=1; shift ;;
+    -h|--help) sed -n '2,8s/^# \{0,1\}//p' "$0"; exit 0 ;;
+    *) pass+=("$1"); shift ;;
+  esac
+done
+
+command -v gh >/dev/null || die "gh is not installed"
+command -v claude >/dev/null || die "claude is not installed"
+git rev-parse --git-dir >/dev/null 2>&1 || die "not in a git repository"
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null) || die "detached HEAD; check out a branch first"
+[[ -n $base ]] || base=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name 2>/dev/null || echo main)
+[[ $branch != "$base" ]] || die "you're on $base; create a branch first (git switch -c <name>)"
+
+if url=$(gh pr view "$branch" --json url,state -q 'select(.state=="OPEN") | .url' 2>/dev/null) && [[ -n $url ]]; then
+  push
+  echo "${B}PR already open:${N} $url"
+  open_url "$url"
+  exit 0
+fi
+
+[[ -z $(git status --porcelain) ]] || printf '%swarning:%s uncommitted changes will not be in the PR\n' "$Y" "$N" >&2
+
+git fetch -q origin "$base" 2>/dev/null || true
+ref=origin/$base
+git rev-parse -q --verify "$ref" >/dev/null || ref=$base
+[[ -n $(git rev-list "$ref..HEAD") ]] || die "no commits on $branch that aren't in $base"
+
+push
+
+context=$(
+  echo "Branch: $branch -> $base"
+  echo; echo "Commits:"; git log --reverse --format='- %s%n%b' "$ref..HEAD"
+  echo; echo "Files changed:"; git diff --stat "$ref...HEAD"
+  # `|| true`: on a big diff head closes the pipe early and git dies of SIGPIPE,
+  # which pipefail + set -e would turn into a silent exit 141.
+  echo; echo "Diff (may be truncated):"; { git diff "$ref...HEAD" || true; } | head -c 60000
+)
+
+echo "${D}Asking Claude for a title and description...${N}"
+out=$(claude -p --model "${PR_MODEL:-haiku}" --tools "" --no-session-persistence \
+  --system-prompt 'You write GitHub pull request titles and descriptions. Reply with exactly this format and nothing else:
+line 1: the title — imperative mood, under 70 characters, no trailing period, no prefix like "PR:" or "Title:"
+line 2: blank
+then: the description in Markdown, at most 100 words. Say what changed and why. Use a few short bullets if it helps. No headings, no preamble, no sign-off, no code fences around the whole thing.' \
+  <<<"$context") || die "claude failed"
+
+title=$(printf '%s\n' "$out" | sed -n '1{s/^#* *//;s/^\*\*\(.*\)\*\*$/\1/;p}')
+body=$(printf '%s\n' "$out" | sed '1d' | sed '/./,$!d')
+[[ -n $title ]] || die "claude returned no title"
+
+bodyfile=$(mktemp --suffix=.md)
+trap 'rm -f "$bodyfile"' EXIT
+printf '%s\n' "$title" "" "$body" >"$bodyfile"
+
+if [[ -z $yes ]]; then
+  while :; do
+    printf '\n%s%s%s\n\n%s\n\n' "$B" "$(head -1 "$bodyfile")" "$N" "$(sed '1,2d' "$bodyfile")"
+    read -rp "Create PR into $base? [Y/e(dit)/n] " ans </dev/tty
+    case ${ans,,} in
+      ''|y|yes) break ;;
+      e|edit) "${EDITOR:-nvim}" "$bodyfile" </dev/tty >/dev/tty ;;
+      *) echo "Cancelled."; exit 1 ;;
+    esac
+  done
+fi
+
+title=$(head -1 "$bodyfile")
+sed -i '1,2d' "$bodyfile"
+out=$(gh pr create --base "$base" --head "$branch" --title "$title" --body-file "$bodyfile" "${pass[@]}")
+printf '%s\n' "$out"
+url=$(grep -o 'https://[^[:space:]]*/pull/[0-9]*' <<<"$out" | tail -1) || true
+if [[ -n $url ]]; then open_url "$url"; fi

@@ -105,4 +105,15 @@ if not themes_with_own_frame[theme_name] then
       },
     },
   })
+
+  -- Smart borders: a lone tiled window (w[tv1]) or a fullscreen one (f[1])
+  -- gets no border or glow, since there's nothing to tell it apart from.
+  for name, ws in pairs({ ["solo-tiled"] = "w[tv1]", ["solo-fullscreen"] = "f[1]" }) do
+    hl.window_rule({
+      name = "no-border-" .. name,
+      match = { float = false, workspace = ws },
+      border_size = 0,
+      no_shadow = true,
+    })
+  end
 end

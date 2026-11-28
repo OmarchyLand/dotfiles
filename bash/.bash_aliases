@@ -14,7 +14,9 @@ alias ,dot='(cd ~/Work/dotfiles && mkdir -p ~/.config/nvim/lua/plugins && for p 
 alias ,lg='lazygit'
 alias ,gs='git status'
 alias ,gco='git checkout'
+alias gco='git checkout'
 alias ,g='git status'
 
 alias ,wifi='wifi'   # fzf Wi-Fi picker (~/.local/bin/wifi)
 alias ,battery='battery'   # battery saver: on|off|status (~/.local/bin/battery)
+alias ,pr='mkpr'   # open a PR with a Claude-written title/description (~/.local/bin/mkpr)
