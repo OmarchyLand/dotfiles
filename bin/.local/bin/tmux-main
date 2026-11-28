@@ -9,6 +9,12 @@
 # one per window (the TUIs from ~/Work/apps, `jdf-<app>-cli`). Each is started
 # from a shell, so quitting an app leaves a prompt in its window.
 
+# On macOS Ghostty starts this without the shell's PATH, so add Homebrew's.
+for d in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin"; do
+  [[ -d $d && :$PATH: != *":$d:"* ]] && PATH="$d:$PATH"
+done
+export PATH
+
 productivity=(mail calendar reminders notes vault cost-control super-tracker)
 entertainment=(tube reddit been browsing)
 
