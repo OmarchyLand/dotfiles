@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+# pdrive — fzf browser for Proton Drive, wrapping the `proton-drive` CLI.
+#
+#   enter / →   open folder, or download + open file
+#   ←           parent folder
+#   tab         multi-select
+#   ctrl-d      download selected to $PDRIVE_DOWNLOAD_DIR (default ~/Downloads)
+#   ctrl-u      upload local files/folders here (fzf picker from $HOME)
+#   alt-n       new folder
+#   ctrl-r      rename
+#   alt-m       move selected to another folder (pick destination)
+#   ctrl-x      move selected to trash
+#   ctrl-y      copy remote path to clipboard
+#   ctrl-l      create/show public share link
+#   ctrl-g      refresh
+#   esc         quit
+#
+# Usage: pdrive [remote-path]   (default /my-files)
+
+set -uo pipefail
+
+PD=${PDRIVE_BIN:-proton-drive}
+DL_DIR=${PDRIVE_DOWNLOAD_DIR:-$HOME/Downloads}
+OPEN_DIR=${XDG_CACHE_HOME:-$HOME/.cache}/pdrive/open
+CACHE=$(mktemp -d "${TMPDIR:-/tmp}/pdrive.XXXXXX")
+trap 'rm -rf "$CACHE"' EXIT
+
+# Linux vs macOS: opening files, clipboard, hashing.
+if [[ $OSTYPE == darwin* ]]; then
+  open_file() { open "$1" >/dev/null 2>&1; }
+  copy()      { pbcopy; }
+  hash16()    { md5 -q | cut -c1-16; }
+else
+  open_file() { setsid -f xdg-open "$1" >/dev/null 2>&1; }
+  copy()      { wl-copy; }
+  hash16()    { md5sum | cut -c1-16; }
+fi
+
+for dep in "$PD" fzf jq; do
+  command -v "$dep" >/dev/null || { echo "pdrive: missing dependency: $dep" >&2; exit 1; }
+done
+
+cwd=${1:-/my-files}
+cwd=${cwd%/}; [[ -z $cwd ]] && cwd=/
+
+# --- helpers ---------------------------------------------------------------
+
+join() { # join <dir> <name>  -> remote path, escaping / in the name
+  local n=${2//\//\\/}
+  [[ $1 == / ]] && printf '/%s' "$n" || printf '%s/%s' "$1" "$n"
+}
+
+parent() {
+  [[ $1 == / ]] && { echo /; return; }
+  local p=${1%/*}   # good enough: escaped slashes in names are rare
+  echo "${p:-/}"
+}
+
+pause() { read -rsn1 -p $'\n\e[2mpress any key…\e[0m' </dev/tty; echo; }
+
+msg() { printf '\e[1;34m::\e[0m %s\n' "$*"; }
+
+invalidate() { rm -f "$CACHE"/*.tsv; }
+
+# Produce TSV: display \t type \t name \t size \t modified \t shared
+listing() {
+  local dir=$1 key
+  key=$CACHE/$(printf '%s' "$dir" | hash16).tsv
+  if [[ ! -s $key ]]; then
+    printf '\e[2mloading %s…\e[0m\r' "$dir" >&2
+    "$PD" filesystem list -j "$dir" 2>"$CACHE/err" | jq -r '
+      def human: if . == null then "-" else
+        (if . < 1024 then "\(.) B"
+         elif . < 1048576 then "\((. / 1024 * 10 | floor) / 10) KiB"
+         elif . < 1073741824 then "\((. / 1048576 * 10 | floor) / 10) MiB"
+         else "\((. / 1073741824 * 100 | floor) / 100) GiB" end) end;
+      map(
+        if has("path") then
+          {t: "section", n: (.path | ltrimstr("/")), s: null, m: "", sh: ""}
+        else
+          {t: (.type // "?"),
+           n: (if .name.ok then .name.value else .uid end),
+           s: (.activeRevision.claimedSize // .totalStorageSize),
+           m: ((.modificationTime // "") | if . == "" then "" else (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601 | localtime | strftime("%Y-%m-%d %H:%M")) end),
+           sh: (if .isSharedByUrl then "link" elif .isShared then "shared" else "" end)}
+        end)
+      | sort_by((if .t == "file" or .t == "photo" then 1 else 0 end), (.n | ascii_downcase))
+      | .[]
+      | [ (if .t == "file" or .t == "photo" then "  " + .n
+           else "\u001b[1;34m  " + .n + "/\u001b[0m" end),
+          .t, .n, (.s | human), .m, .sh ] | @tsv' >"$key" || true
+    printf '\e[K' >&2
+  fi
+  cat "$key"
+}
+
+is_dir() { [[ $1 != file && $1 != photo ]]; }
+
+pick_remote_dir() { # interactive folder picker, prints chosen path
+  local d=$1 out sel
+  while :; do
+    out=$( { printf '\e[32m  [ choose this folder ]\e[0m\t.\n'; [[ $d != / ]] && printf '  ..\t..\n'
+             listing "$d" | awk -F'\t' '$2!="file" && $2!="photo" {print $1"\t"$3}'; } |
+      fzf --ansi --delimiter='\t' --with-nth=1 --prompt="move to: $d/ " --height=60% --reverse) || return 1
+    sel=${out#*$'\t'}
+    case $sel in
+      .)  echo "$d"; return 0 ;;
+      ..) d=$(parent "$d") ;;
+      *)  d=$(join "$d" "$sel") ;;
+    esac
+  done
+}
+
+# --- main loop -------------------------------------------------------------
+
+HEADER='enter/→ open  ← up  tab select  ^d download  ^u upload  M-n mkdir  ^r rename  M-m move  ^x trash  ^y copy path  ^l link  ^g refresh'
+
+while :; do
+  out=$( { [[ $cwd != / ]] && printf '  ..\tup\t..\t\t\t\n'; listing "$cwd"; } |
+    fzf --ansi --multi --reverse --no-sort \
+        --delimiter='\t' --with-nth=1 \
+        --prompt="proton:$cwd/ " \
+        --header="$HEADER" --header-first \
+        --preview='printf "\e[1m%s\e[0m\n\ntype:     %s\nsize:     %s\nmodified: %s\nsharing:  %s\n" {3} {2} {4} {5} {6}' \
+        --preview-window='right,35%,wrap' \
+        --expect=left,right,ctrl-d,ctrl-u,alt-n,ctrl-r,alt-m,ctrl-x,ctrl-y,ctrl-l,ctrl-g
+  ) || exit 0
+
+  key=$(head -1 <<<"$out")
+  mapfile -t rows < <(tail -n +2 <<<"$out")
+  types=(); names=(); paths=()
+  for r in "${rows[@]}"; do
+    IFS=$'\t' read -r _ t n _ <<<"$r"
+    [[ $n == .. ]] && continue
+    types+=("$t"); names+=("$n"); paths+=("$(join "$cwd" "$n")")
+  done
+  first_row=${rows[0]-}
+  IFS=$'\t' read -r _ ftype fname _ <<<"$first_row"
+
+  case $key in
+    left)
+      cwd=$(parent "$cwd") ;;
+
+    ''|right)
+      if [[ $fname == .. ]]; then
+        cwd=$(parent "$cwd")
+      elif is_dir "$ftype"; then
+        cwd=$(join "$cwd" "$fname")
+      elif [[ -n $fname ]]; then
+        dest=$OPEN_DIR/$(date +%s)$RANDOM; mkdir -p "$dest"
+        msg "downloading $fname…"
+        if "$PD" filesystem download -f rename "$(join "$cwd" "$fname")" "$dest"; then
+          open_file "$dest/$fname"
+        else pause; fi
+      fi ;;
+
+    ctrl-d)
+      (( ${#paths[@]} )) || continue
+      mkdir -p "$DL_DIR"
+      msg "downloading ${#paths[@]} item(s) to $DL_DIR"
+      "$PD" filesystem download -f rename -d merge "${paths[@]}" "$DL_DIR"
+      pause ;;
+
+    ctrl-u)
+      mapfile -t locals < <(cd "$HOME" && fd --hidden --exclude .git --exclude .cache . |
+        fzf --multi --reverse --prompt="upload to $cwd/ (tab=multi) > " \
+            --preview='[[ -d {} ]] && ls -la {} || bat --color=always --style=plain {} 2>/dev/null || file {}' |
+        sed "s|^|$HOME/|")
+      (( ${#locals[@]} )) || continue
+      msg "uploading ${#locals[@]} item(s) to $cwd"
+      "$PD" filesystem upload -f rename -d merge "${locals[@]}" "$cwd"
+      invalidate; pause ;;
+
+    alt-n)
+      read -rp "new folder in $cwd/: " nm </dev/tty
+      [[ -n $nm ]] || continue
+      "$PD" filesystem create-folder "$cwd" "$nm" || pause
+      invalidate ;;
+
+    ctrl-r)
+      [[ -n $fname && $fname != .. ]] || continue
+      read -rp "rename '$fname' to: " -i "$fname" -e nm </dev/tty
+      [[ -n $nm && $nm != "$fname" ]] || continue
+      "$PD" filesystem rename "$(join "$cwd" "$fname")" "$nm" || pause
+      invalidate ;;
+
+    alt-m)
+      (( ${#paths[@]} )) || continue
+      dst=$(pick_remote_dir "$cwd") || continue
+      msg "moving ${#paths[@]} item(s) to $dst"
+      "$PD" filesystem move "${paths[@]}" "$dst" || pause
+      invalidate ;;
+
+    ctrl-x)
+      (( ${#paths[@]} )) || continue
+      printf '%s\n' "${names[@]}"
+      read -rp "move ${#paths[@]} item(s) to trash? [y/N] " yn </dev/tty
+      [[ $yn == [yY] ]] || continue
+      "$PD" filesystem trash "${paths[@]}" || pause
+      invalidate ;;
+
+    ctrl-y)
+      p=${paths[0]:-$cwd}
+      printf '%s' "$p" | copy && msg "copied: $p"; sleep 0.6 ;;
+
+    ctrl-l)
+      [[ -n ${paths[0]-} ]] || continue
+      msg "share link for ${names[0]}"
+      "$PD" sharing set-url "${paths[0]}"
+      echo; "$PD" sharing status "${paths[0]}"
+      invalidate; pause ;;
+
+    ctrl-g)
+      invalidate ;;
+  esac
+done

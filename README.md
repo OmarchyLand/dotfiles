@@ -23,10 +23,29 @@ real, and reports conflicts without stopping):
 ./install.sh -n          # dry run
 ```
 
+### macOS
+
+```sh
+./install_macos.sh               # brew packages + Proton Drive CLI, then restow
+./install_macos.sh --stow-only   # just restow (`,dot` runs this on macOS)
+./install_macos.sh -n            # dry run
+```
+
+Needs [Homebrew](https://brew.sh). Installs bash 5, stow, neovim, tmux, starship, yazi, fzf,
+fd, bat, jq, gh, lazygit, Ghostty and the Terminess Nerd Font, plus Proton's official
+`proton-drive` CLI (checksum-verified) into `~/.local/bin`, and makes `~/.bash_profile`
+source `~/.bashrc`. Stows `bash bin ghostty jdf nvim starship tmux yazi`; skips `keyd`,
+`plymouth`, `hypr`, `omarchy-lock`, `omarchy-themes` and the Linux-only scripts in `bin`
+(`battery`, `wifi`, `plymouth-ghost`, `mem`, `ports`). The jdf TUIs (`/usr/bin/jdf-*`, Arch
+packages) don't exist there: `tmux-main` just leaves those windows as shells, and `pdrive`
+(`,pd`) stands in for `jdf-pdrive`. Switch your login shell to Homebrew's bash afterwards
+(the script prints the `chsh` line). Without Omarchy, `.bashrc` sets up starship, zoxide and
+fzf itself, nvim falls back to `astrodark`, and Ghostty's theme include is simply skipped.
+
 ## Packages
 
 - `bash` — `.bashrc` (layered on top of Omarchy's defaults) and `.bash_aliases`
-- `bin` — personal scripts in `~/.local/bin` (e.g. `reload-shells`, `ports` — explains what is listening on each port, `mem` — which apps are using memory, `battery` — battery saver: `,battery` / `,battery off` / `,battery status`, `mkpr` — `,pr` opens a pull request for the current branch with a Claude-written title and description, `plymouth-ghost` — installs the `plymouth` boot splash, see below)
+- `bin` — personal scripts in `~/.local/bin` (e.g. `reload-shells`, `ports` — explains what is listening on each port, `mem` — which apps are using memory, `battery` — battery saver: `,battery` / `,battery off` / `,battery status`, `mkpr` — `,pr` opens a pull request for the current branch with a Claude-written title and description, `plymouth-ghost` — installs the `plymouth` boot splash, see below, `pdrive` — `,pd` fzf browser for Proton Drive over the `proton-drive` CLI)
 - `jdf` — `~/.config/jdf/usage.toml`, settings for the key-usage logging in `~/Work/apps`
   (on/off, Amplitude region, user id, upload interval). The Amplitude API key is a secret and
   stays out of this public repo: it goes in `~/.config/jdf/amplitude.key`, a real file beside the
